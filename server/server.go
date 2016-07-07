@@ -41,19 +41,19 @@ func (j JSONResponse) String() string {
 	return string(str)
 }
 
-// pasteUploadHander is the request handler for /paste
-// it creates a uuid for the paste and saves the contents of
-// the paste to that file.
+// jobsHandler is the request handler for /jobs
+// it creates a uuid for the upload if needed and saves the
+// contents of the uploaded file under a jobid specific dir
 func jobsHandler(w http.ResponseWriter, r *http.Request) {
 
 	subDirName := "output"
-	// create a unique id for the paste
+	// create a unique id for the job
 	uniqId, err := uuid()
 	if err != nil {
 		writeError(w, fmt.Sprintf("uuid generation failed: %v", err))
 		return
 	}
-	// set the content type and check to make sure they are POST-ing a paste
+	// set the content type and check to make sure they are POST-ing a job
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != "POST" {
 		writeError(w, "not a valid endpoint")
@@ -69,7 +69,7 @@ func jobsHandler(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	// read the body of the paste
+	// read the body of the file
 	content, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, fmt.Sprintf("reading from body failed: %v", err))
@@ -89,22 +89,22 @@ func jobsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// serve the uri for the paste to the requester
+	// serve the uri for the uploaded file and jobid to the requester
 	fmt.Fprint(w, JSONResponse{
 		"jobId":            jobId,
 		"uploadedFileName": jobFileName,
 		"uri":              baseuri + jobId + "/" + subDirName + "/" + jobFileName,
 	})
-	logrus.Infof("jobFile %q uploaded successfully", jobId)
+	logrus.Infof("jobFile %s/%s/%s uploaded successfully", jobId, subDirName, jobFileName)
 	return
 }
 
-// uuid generates a uuid for the paste.
+// uuid generates a uuid for the job.
 // This really does not need to be perfect.
 func uuid() (string, error) {
 	var chars = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
 
-	length := 8
+	length := 12
 	b := make([]byte, length)
 	r := make([]byte, length+(length/4))
 	maxrb := 256 - (256 % len(chars))
@@ -141,7 +141,7 @@ func writeError(w http.ResponseWriter, msg string) {
 func init() {
 	flag.StringVar(&baseuri, "b", "http://localhost/", "url base for this domain")
 	flag.StringVar(&port, "p", "80", "port for server to run on")
-	flag.StringVar(&storage, "s", "./storage/", "directory to store pastes")
+	flag.StringVar(&storage, "s", "./storage/", "directory to store jobs input or output files")
 	flag.Parse()
 
 	// ensure uri has trailing slash
@@ -163,8 +163,8 @@ func main() {
 	staticHandler := http.StripPrefix("/", http.FileServer(http.Dir(storage)))
 	mux.Handle("/", staticHandler)
 
-	// pastes & view handlers
-	mux.HandleFunc("/jobs", jobsHandler) // paste upload handler
+	// jobs Upload Handler
+	mux.HandleFunc("/jobs", jobsHandler)
 
 	// set up the server
 	server := &http.Server{

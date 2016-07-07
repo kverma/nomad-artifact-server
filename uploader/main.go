@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -41,9 +42,9 @@ func readFromFile(filename string) []byte {
 	return file
 }
 
-// postPaste uploads the paste content to the server
-// and returns the paste URI.
-func postPaste(content []byte, fileName string, jobid string) (string, string, error) {
+// postJobFile uploads the file content to the server
+// and returns the JobID and URI.
+func postJobFile(content []byte, fileName string, jobid string) (string, string, error) {
 	// create the request
 	req, err := http.NewRequest("POST", baseuri+"jobs", bytes.NewBuffer(content))
 	if err != nil {
@@ -59,7 +60,7 @@ func postPaste(content []byte, fileName string, jobid string) (string, string, e
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("request to %spaste failed: %v", baseuri, err)
+		return "", "", fmt.Errorf("request to %sjobs failed: %v", baseuri, err)
 	}
 	defer resp.Body.Close()
 
@@ -77,22 +78,22 @@ func postPaste(content []byte, fileName string, jobid string) (string, string, e
 		return "", "", fmt.Errorf("server responded with %s", respError)
 	}
 
-	pasteURI, ok := response["uri"]
+	uploadedFileUri, ok := response["uri"]
 	if !ok {
-		return "", "", fmt.Errorf("what the hell did we get back even? %s", string(body))
+		return "", "", fmt.Errorf("Upload Error - Server Response %s", string(body))
 	}
 
 	jobId, ok := response["jobId"]
 	if !ok {
-		return "", "", fmt.Errorf("what the hell did we get back even? %s", string(body))
+		return "", "", fmt.Errorf("Upload Error - Server Response %s", string(body))
 	}
 
-	return pasteURI, jobId, nil
+	return uploadedFileUri, jobId, nil
 }
 
 func init() {
-	flag.StringVar(&baseuri, "b", "http://localhost/", "pastebin base url")
-	flag.StringVar(&jobid, "j", "", "jobid to use for upload")
+	flag.StringVar(&baseuri, "b", "http://localhost/", "server base url")
+	flag.StringVar(&jobid, "j", "", "jobid to use for upload, if not set, server will assign one for future use.")
 	flag.Parse()
 
 	// make sure uri ends with trailing /
@@ -114,14 +115,15 @@ func main() {
 		filename = "tempfile"
 		content = readFromStdin()
 	} else {
-		filename = args[0]
-		content = readFromFile(filename)
+		tempfilename := args[0]
+		filename = url.QueryEscape(tempfilename)
+		content = readFromFile(tempfilename)
 	}
 
-	pasteURI, jobId, err := postPaste(content, filename, jobid)
+	fileUrl, jobId, err := postJobFile(content, filename, jobid)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	fmt.Printf("Your File has been uploaded successfully \n[JobId]: %s\n[URL]: %s\n", jobId, pasteURI)
+	fmt.Printf("Your File has been uploaded successfully \n[JobId]: %s\n[URL]: %s\n", jobId, fileUrl)
 }
